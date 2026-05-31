@@ -2,6 +2,7 @@ package com.ticket.service;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.springframework.stereotype.Service;
 
@@ -21,33 +22,47 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final SeatRepository seatRepository;
+    private final SeatLockManager lockManager;
+    // private final ReentrantLock lock = new ReentrantLock(); 
 
-    public String bookSeat(BookingRequestDto request){
-        /* STEP 1: We need to check if the seat is available */
-        Optional<Seat> seat = seatRepository.findBySeatNumberAndShowId(request.getSeatNumber(), request.getShowId());
-        if(seat.isEmpty()){
-            throw new RuntimeException("Seat not found for the given show");
-        } else if(seat.get().getStatus() == SeatStatus.BOOKED){
-            return "Seat is already booked";
+
+    public String bookSeat(BookingRequestDto request) {
+        System.out.println(Thread.currentThread().getName() + " TRYING LOCK FOR " + request.getSeatNumber());
+        ReentrantLock lock = lockManager.getLock(request.getSeatNumber());
+        lock.lock();
+        System.out.println(Thread.currentThread().getName()+ " ACQUIRED LOCK FOR " + request.getSeatNumber());
+        try {
+            /* STEP 1: We need to check if the seat is available */
+            Optional<Seat> seat = seatRepository.findBySeatNumberAndShowId(request.getSeatNumber(),
+                    request.getShowId());
+            if (seat.isEmpty()) {
+                throw new RuntimeException("Seat not found for the given show");
+            } else if (seat.get().getStatus() == SeatStatus.BOOKED) {
+                return "Seat is already booked";
+            }
+
+            /* added delay to check race condition */
+            CommonHelper.addDelay();
+
+            /* Step 2: If seat is available, book it */
+            seat.get().setStatus(SeatStatus.BOOKED);
+            seatRepository.save(seat.get());
+
+            Booking booking = Booking.builder()
+                    .userName(request.getUserName())
+                    .seatNumber(request.getSeatNumber())
+                    .showId(request.getShowId())
+                    .bookingTime(LocalDateTime.now())
+                    .build();
+
+            bookingRepository.save(booking);
+
+            lock.unlock();
+            return "Seat booked successfully";
+        } finally {
+            System.out.println(Thread.currentThread().getName() + " RELEASING LOCK FOR " + request.getSeatNumber());
+            lock.unlock();
         }
-
-        /* added delay to check race condition */
-        CommonHelper.addDelay();
-
-        /* Step 2: If seat is available, book it */
-        seat.get().setStatus(SeatStatus.BOOKED);
-        seatRepository.save(seat.get());
-
-        Booking booking = Booking.builder()
-        .userName(request.getUserName())
-        .seatNumber(request.getSeatNumber())
-        .showId(request.getShowId())
-        .bookingTime(LocalDateTime.now())
-        .build();
-
-        bookingRepository.save(booking);
-
-        return "Seat booked successfully";
     }
 
 }
