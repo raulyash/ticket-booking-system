@@ -25,6 +25,8 @@ public class BookingService {
     private final SeatLockManager lockManager;
     // private final ReentrantLock lock = new ReentrantLock(); 
 
+    private final SeatCacheService seatCacheService;
+
 
     public String bookSeat(BookingRequestDto request) {
         System.out.println(Thread.currentThread().getName() + " TRYING LOCK FOR " + request.getSeatNumber());
@@ -47,6 +49,9 @@ public class BookingService {
             /* Step 2: If seat is available, book it */
             seat.get().setStatus(SeatStatus.BOOKED);
             seatRepository.save(seat.get());
+
+            // updating cache
+            seatCacheService.updateCache(seat.get());
 
             Booking booking = Booking.builder()
                     .userName(request.getUserName())
