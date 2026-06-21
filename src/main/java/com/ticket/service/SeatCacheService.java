@@ -46,7 +46,7 @@ public class SeatCacheService {
 
     }
 
-    public List<Seat> getAllSeats(){
+    public List<Seat>  getAllSeats(){
         readWriteLock.readLock().lock();
         try{
             return new ArrayList<>(seatCache.values());

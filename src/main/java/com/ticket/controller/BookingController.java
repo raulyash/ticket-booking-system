@@ -19,7 +19,7 @@ public class BookingController {
     private final BookingService bookingService;
 
     @PostMapping("/book")
-    public String bookSeat(@Valid @RequestBody BookingRequestDto bookingRequestDto){
+    public String bookSeat(@Valid @RequestBody BookingRequestDto bookingRequestDto) throws InterruptedException{
         return bookingService.bookSeat(bookingRequestDto);
     }
 

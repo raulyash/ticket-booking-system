@@ -18,15 +18,20 @@ public class SimulationService {
     public void simulateBooking(){
         ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-        for(int i=0; i<=100; i++){
+        for(int i=0; i<100; i++){
             int userNumber = i;
             executorService.submit(()->{
                 BookingRequestDto bookingRequestDto = BookingRequestDto.builder()
                 .showId(1L)
-                .seatNumber("A" + ((userNumber % 5) + 1))
+                .seatNumber("A1")
                 .userName("User-" + userNumber).build();
 
-                String response = bookingService.bookSeat(bookingRequestDto);
+                String response = "";
+                try {
+                    response = bookingService.bookSeat(bookingRequestDto);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
                 System.out.println(Thread.currentThread().getName() + "->" + response);
             });

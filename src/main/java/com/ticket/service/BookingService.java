@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import com.ticket.dto.BookingRequestDto;
@@ -14,6 +15,7 @@ import com.ticket.model.SeatStatus;
 import com.ticket.repository.BookingRepository;
 import com.ticket.repository.SeatRepository;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -22,33 +24,41 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final SeatRepository seatRepository;
-    private final SeatLockManager lockManager;
+
+    /* Commenting this for Pessimistic Lock implementation 
+    private final SeatLockManager lockManager;*/
+
     // private final ReentrantLock lock = new ReentrantLock(); 
 
     private final SeatCacheService seatCacheService;
 
 
-    public String bookSeat(BookingRequestDto request) {
-        System.out.println(Thread.currentThread().getName() + " TRYING LOCK FOR " + request.getSeatNumber());
-        ReentrantLock lock = lockManager.getLock(request.getSeatNumber());
-        lock.lock();
-        System.out.println(Thread.currentThread().getName()+ " ACQUIRED LOCK FOR " + request.getSeatNumber());
+    @Transactional
+    public String bookSeat(BookingRequestDto request) throws InterruptedException {
+        // ReentrantLock lock = lockManager.getLock(request.getSeatNumber());
+        // lock.lock();
         try {
             /* STEP 1: We need to check if the seat is available */
-            Optional<Seat> seat = seatRepository.findBySeatNumberAndShowId(request.getSeatNumber(),
+            System.out.println(Thread.currentThread().getName() + " TRYING TO ACQUIRED DB LOCK FOR " + request.getSeatNumber());
+            Optional<Seat> seat = seatRepository.findSeatForUpdate(request.getSeatNumber(),
                     request.getShowId());
+            System.out.println(Thread.currentThread().getName() + " DB LOCK ACQUIRED FOR " + request.getSeatNumber());
+            /* added delay to check race condition */
+            CommonHelper.addDelay();
             if (seat.isEmpty()) {
                 throw new RuntimeException("Seat not found for the given show");
             } else if (seat.get().getStatus() == SeatStatus.BOOKED) {
                 return "Seat is already booked";
             }
 
-            /* added delay to check race condition */
-            CommonHelper.addDelay();
-
             /* Step 2: If seat is available, book it */
             seat.get().setStatus(SeatStatus.BOOKED);
+
+            // try{
             seatRepository.save(seat.get());
+            // } catch (ObjectOptimisticLockingFailureException e){
+            //     return "Seat already booked by another user";
+            // }
 
             // updating cache
             seatCacheService.updateCache(seat.get());
@@ -62,11 +72,12 @@ public class BookingService {
 
             bookingRepository.save(booking);
 
-            lock.unlock();
+            // lock.unlock();
+            System.out.println(Thread.currentThread().getName() + " RELEASING LOCK " + request.getSeatNumber());
             return "Seat booked successfully";
         } finally {
             System.out.println(Thread.currentThread().getName() + " RELEASING LOCK FOR " + request.getSeatNumber());
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
